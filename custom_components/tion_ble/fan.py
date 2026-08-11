@@ -28,6 +28,7 @@ class TionLiteFan(TionBleEntity, FanEntity):
 
     _attr_name = None
     _attr_translation_key = "breezer"
+    _attr_icon = "mdi:air-filter"
     _attr_supported_features = (
         FanEntityFeature.TURN_ON
         | FanEntityFeature.TURN_OFF

@@ -66,6 +66,26 @@
         "name": "Heating active"
       }
     },
+    "button": {
+      "fan_speed_1": {
+        "name": "Speed 1"
+      },
+      "fan_speed_2": {
+        "name": "Speed 2"
+      },
+      "fan_speed_3": {
+        "name": "Speed 3"
+      },
+      "fan_speed_4": {
+        "name": "Speed 4"
+      },
+      "fan_speed_5": {
+        "name": "Speed 5"
+      },
+      "fan_speed_6": {
+        "name": "Speed 6"
+      }
+    },
     "fan": {
       "breezer": {
         "name": "Breezer"

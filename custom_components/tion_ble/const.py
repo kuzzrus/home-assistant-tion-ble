@@ -23,6 +23,7 @@ MAX_TARGET_TEMPERATURE: Final = 25
 
 PLATFORMS: Final = [
     "binary_sensor",
+    "button",
     "fan",
     "number",
     "select",
