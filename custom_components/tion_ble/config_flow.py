@@ -18,11 +18,10 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
 
 from .client import TionBleError, TionLiteClient
-from .const import DOMAIN, SERVICE_UUID
+from .const import DISCOVERY_TIMEOUT, DOMAIN, SERVICE_UUID
 from .discovery import device_label, matches_tion_lite
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_DURATION = 10.0
 
 
 def _device_title(address: str, advertised_name: str | None = None) -> str:
@@ -188,7 +187,7 @@ class TionBleConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_scan(self) -> None:
         """Run an active scan and collect likely Tion Lite devices."""
-        await bluetooth.async_request_active_scan(self.hass, SCAN_DURATION)
+        await bluetooth.async_request_active_scan(self.hass, DISCOVERY_TIMEOUT)
 
         self._configured_addresses = set(self._async_current_ids(include_ignore=False))
         for discovery_info in async_discovered_service_info(self.hass):

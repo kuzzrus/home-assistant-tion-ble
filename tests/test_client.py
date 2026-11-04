@@ -37,18 +37,26 @@ async def test_setup_pairs_then_waits_and_reads_state(
     """Pair in a separate connection before reading the state."""
     state = object()
     calls = MagicMock()
+    ensure_visible = AsyncMock()
     pair = AsyncMock()
     sleep = AsyncMock()
     update = AsyncMock(return_value=state)
+    calls.attach_mock(ensure_visible, "ensure_visible")
     calls.attach_mock(pair, "pair")
     calls.attach_mock(sleep, "sleep")
     calls.attach_mock(update, "update")
+    monkeypatch.setattr(client, "_async_ensure_visible", ensure_visible)
     monkeypatch.setattr(client, "_async_pair", pair)
     monkeypatch.setattr(client_module.asyncio, "sleep", sleep)
     monkeypatch.setattr(client, "async_update", update)
 
     assert await client.async_setup() is state
-    assert calls.mock_calls == [call.pair(), call.sleep(3.0), call.update()]
+    assert calls.mock_calls == [
+        call.ensure_visible(),
+        call.pair(),
+        call.sleep(3.0),
+        call.update(),
+    ]
 
 
 async def test_setup_stops_when_pairing_fails(
@@ -57,6 +65,7 @@ async def test_setup_stops_when_pairing_fails(
     """Do not send protocol data after a pairing failure."""
     pair = AsyncMock(side_effect=TionBleConnectionError("not authorized"))
     update = AsyncMock()
+    monkeypatch.setattr(client, "_async_ensure_visible", AsyncMock())
     monkeypatch.setattr(client, "_async_pair", pair)
     monkeypatch.setattr(client, "async_update", update)
 
@@ -64,6 +73,71 @@ async def test_setup_stops_when_pairing_fails(
         await client.async_setup()
 
     update.assert_not_awaited()
+
+
+async def test_setup_rescans_when_device_is_not_initially_visible(
+    client: TionLiteClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An active scan gives a manually entered address another chance to appear."""
+    ble_device = object()
+    lookup = MagicMock(side_effect=[TionBleDeviceNotFound("not visible"), ble_device])
+    active_scan = AsyncMock()
+    monkeypatch.setattr(client, "_ble_device", lookup)
+    monkeypatch.setattr(
+        client_module.bluetooth,
+        "async_request_active_scan",
+        active_scan,
+        raising=False,
+    )
+
+    await client._async_ensure_visible()
+
+    active_scan.assert_awaited_once_with(client._hass, 10.0)
+    assert lookup.call_count == 2
+
+
+async def test_setup_does_not_rescan_visible_device(
+    client: TionLiteClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A device already known to Home Assistant proceeds without extra delay."""
+    active_scan = AsyncMock()
+    monkeypatch.setattr(client, "_ble_device", MagicMock(return_value=object()))
+    monkeypatch.setattr(
+        client_module.bluetooth,
+        "async_request_active_scan",
+        active_scan,
+        raising=False,
+    )
+
+    await client._async_ensure_visible()
+
+    active_scan.assert_not_awaited()
+
+
+async def test_setup_stops_when_device_remains_invisible_after_rescan(
+    client: TionLiteClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pairing does not start if the active scan still cannot find the address."""
+    active_scan = AsyncMock()
+    pair = AsyncMock()
+    monkeypatch.setattr(
+        client,
+        "_ble_device",
+        MagicMock(side_effect=TionBleDeviceNotFound("not visible")),
+    )
+    monkeypatch.setattr(client, "_async_pair", pair)
+    monkeypatch.setattr(
+        client_module.bluetooth,
+        "async_request_active_scan",
+        active_scan,
+        raising=False,
+    )
+
+    with pytest.raises(TionBleDeviceNotFound, match="not visible"):
+        await client.async_setup()
+
+    active_scan.assert_awaited_once_with(client._hass, 10.0)
+    pair.assert_not_awaited()
 
 
 async def test_pair_uses_direct_bluez_agent_without_gatt_connection(
