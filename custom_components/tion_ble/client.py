@@ -21,6 +21,7 @@ from .bluez_pairing import (
     async_pair_with_bluez,
 )
 from .const import (
+    DISCOVERY_TIMEOUT,
     NOTIFY_CHARACTERISTIC_UUID,
     PAIRING_SETTLE_DELAY,
     PAIRING_TIMEOUT,
@@ -69,9 +70,18 @@ class TionLiteClient:
 
     async def async_setup(self) -> TionLiteState:
         """Pair first, let the breezer settle, then read its state."""
+        await self._async_ensure_visible()
         await self._async_pair()
         await asyncio.sleep(PAIRING_SETTLE_DELAY)
         return await self.async_update()
+
+    async def _async_ensure_visible(self) -> None:
+        """Actively scan once when the selected address is not yet visible."""
+        try:
+            self._ble_device()
+        except TionBleDeviceNotFound:
+            await bluetooth.async_request_active_scan(self._hass, DISCOVERY_TIMEOUT)
+            self._ble_device()
 
     async def async_update(self) -> TionLiteState:
         """Read the current state."""
