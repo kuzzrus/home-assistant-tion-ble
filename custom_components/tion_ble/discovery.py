@@ -20,6 +20,9 @@ def device_label(
     name: str | None,
     rssi: int,
     title_builder: Callable[[str, str | None], str],
+    *,
+    configured: bool = False,
 ) -> str:
     """Build a device-picker label with address and signal strength."""
-    return f"{title_builder(address, name)} — {address} — RSSI {rssi} dBm"
+    marker = "✓ " if configured else ""
+    return f"{marker}{title_builder(address, name)} — {address} — RSSI {rssi} dBm"

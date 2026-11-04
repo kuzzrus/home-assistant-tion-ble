@@ -28,3 +28,17 @@ def test_device_label_contains_name_address_and_signal() -> None:
         )
         == "Tion Lite — AA:BB:CC:DD:EE:FF — RSSI -61 dBm"
     )
+
+
+def test_device_label_marks_configured_device() -> None:
+    """The picker clearly marks a breezer that is already configured."""
+    assert (
+        device_label(
+            "AA:BB:CC:DD:EE:FF",
+            "Tion Lite",
+            -61,
+            lambda _address, name: str(name),
+            configured=True,
+        )
+        == "✓ Tion Lite — AA:BB:CC:DD:EE:FF — RSSI -61 dBm"
+    )

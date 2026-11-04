@@ -44,6 +44,7 @@ class TionBleConfigFlow(ConfigFlow, domain=DOMAIN):
         self._connect_succeeded = False
         self._connect_task: asyncio.Task[None] | None = None
         self._title: str | None = None
+        self._configured_addresses: set[str] = set()
         self._discovered: dict[str, BluetoothServiceInfoBleak] = {}
         self._scan_task: asyncio.Task[None] | None = None
 
@@ -189,10 +190,10 @@ class TionBleConfigFlow(ConfigFlow, domain=DOMAIN):
         """Run an active scan and collect likely Tion Lite devices."""
         await bluetooth.async_request_active_scan(self.hass, SCAN_DURATION)
 
-        configured_addresses = self._async_current_ids(include_ignore=False)
+        self._configured_addresses = set(self._async_current_ids(include_ignore=False))
         for discovery_info in async_discovered_service_info(self.hass):
             address = format_mac(discovery_info.address)
-            if address in configured_addresses or not matches_tion_lite(
+            if not matches_tion_lite(
                 discovery_info.name, discovery_info.service_uuids, SERVICE_UUID
             ):
                 continue
@@ -223,6 +224,10 @@ class TionBleConfigFlow(ConfigFlow, domain=DOMAIN):
         """Let the user select a discovered Tion Lite."""
         if user_input is not None:
             address = user_input[CONF_ADDRESS]
+            if address in self._configured_addresses:
+                return self._show_select_form(
+                    errors={CONF_ADDRESS: "already_configured"}
+                )
             await self.async_set_unique_id(address, raise_on_progress=False)
             self._abort_if_unique_id_configured()
             self._address = address
@@ -230,6 +235,12 @@ class TionBleConfigFlow(ConfigFlow, domain=DOMAIN):
             self._title = _device_title(address, discovery.name)
             return await self.async_step_bluetooth_confirm()
 
+        return self._show_select_form()
+
+    def _show_select_form(
+        self, errors: dict[str, str] | None = None
+    ) -> ConfigFlowResult:
+        """Show discovered devices and mark entries already configured."""
         return self.async_show_form(
             step_id="select",
             data_schema=vol.Schema(
@@ -237,17 +248,24 @@ class TionBleConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_ADDRESS): vol.In(
                         {
                             address: device_label(
-                                address, info.name, info.rssi, _device_title
+                                address,
+                                info.name,
+                                info.rssi,
+                                _device_title,
+                                configured=address in self._configured_addresses,
                             )
                             for address, info in sorted(
                                 self._discovered.items(),
-                                key=lambda item: item[1].rssi,
-                                reverse=True,
+                                key=lambda item: (
+                                    item[0] in self._configured_addresses,
+                                    -item[1].rssi,
+                                ),
                             )
                         }
                     )
                 }
             ),
+            errors=errors,
         )
 
     async def async_step_manual(
