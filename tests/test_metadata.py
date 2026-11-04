@@ -15,7 +15,7 @@ def test_manifest() -> None:
 
     assert manifest["domain"] == "tion_ble"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "0.3.4"
+    assert manifest["version"] == "0.3.5"
     assert manifest["bluetooth"][0]["service_uuid"].startswith("98f00001")
 
 
@@ -31,5 +31,7 @@ def test_translations_are_valid_json() -> None:
         assert content["entity"]["select"]["fan_speed"]["name"]
         assert content["config"]["progress"]["connecting"]
         assert content["config"]["progress"]["scanning"]
+        assert content["config"]["error"]["already_configured"]
         assert content["config"]["step"]["connection_error"]["menu_options"]
         assert content["config"]["step"]["scan_result"]["menu_options"]["select"]
+        assert "✓" in content["config"]["step"]["select"]["description"]

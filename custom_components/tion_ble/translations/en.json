@@ -4,6 +4,7 @@
       "already_configured": "This Tion Lite is already configured."
     },
     "error": {
+      "already_configured": "This Tion Lite is already configured. Select another breezer.",
       "cannot_connect": "Unable to connect. Make sure Tion Lite is in pairing mode, the Tion Remote app is closed, and the Home Assistant Bluetooth adapter can see the device. The detailed reason was written to the Home Assistant log.",
       "invalid_address": "Enter the MAC address as AA:BB:CC:DD:EE:FF."
     },
@@ -52,7 +53,7 @@
         "data": {
           "address": "Found breezer"
         },
-        "description": "Select your Tion Lite. The list shows its name, MAC address, and RSSI signal level. An RSSI value closer to zero means a stronger signal.",
+        "description": "Select your Tion Lite. Breezers marked ✓ are already configured and cannot be selected again. The list also shows the MAC address and RSSI signal level: a value closer to zero means a stronger signal.",
         "title": "Select Tion Lite"
       }
     }
