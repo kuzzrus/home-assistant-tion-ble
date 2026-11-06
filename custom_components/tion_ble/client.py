@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+from collections.abc import Mapping
 
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import (
@@ -138,8 +139,21 @@ class TionLiteClient:
     async def _async_pair(self) -> None:
         """Pair through a local BlueZ agent, falling back for proxy adapters."""
         ble_device = self._ble_device()
+        bluez_device_path = _bluez_device_path(ble_device)
+        if bluez_device_path is None:
+            _LOGGER.debug(
+                "%s: selected Bluetooth route is not local BlueZ; using Bleak",
+                self.address,
+            )
+            await self._async_pair_with_bleak(ble_device)
+            return
+
         try:
-            await async_pair_with_bluez(self.address, PAIRING_TIMEOUT)
+            await async_pair_with_bluez(
+                self.address,
+                PAIRING_TIMEOUT,
+                bluez_device_path,
+            )
             return
         except BlueZPairingUnavailable as err:
             _LOGGER.debug(
@@ -265,3 +279,15 @@ class TionLiteClient:
                         self.address,
                         exc_info=True,
                     )
+
+
+def _bluez_device_path(ble_device: BLEDevice) -> str | None:
+    """Return the exact local BlueZ path selected by Home Assistant."""
+    details = ble_device.details
+    if not isinstance(details, Mapping):
+        return None
+
+    path = details.get("path")
+    if isinstance(path, str) and path.startswith("/org/bluez/hci") and "/dev_" in path:
+        return path
+    return None

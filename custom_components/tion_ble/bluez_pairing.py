@@ -138,7 +138,11 @@ if _DBUS_AVAILABLE:
             self._record("Cancel")
 
 
-async def async_pair_with_bluez(address: str, timeout: float) -> None:
+async def async_pair_with_bluez(
+    address: str,
+    timeout: float,
+    selected_device_path: str | None = None,
+) -> None:
     """Pair a locally visible device using a temporary NoInputNoOutput agent."""
     if not _DBUS_AVAILABLE:
         raise BlueZPairingUnavailable("dbus-fast is unavailable")
@@ -156,10 +160,15 @@ async def async_pair_with_bluez(address: str, timeout: float) -> None:
                 f"cannot access the BlueZ system bus: {_error_detail(err)}"
             ) from err
 
-        device_path = await _find_device_path(bus, address)
+        device_path = await _find_device_path(bus, address, selected_device_path)
         if device_path is None:
+            location = (
+                f" at {selected_device_path}"
+                if selected_device_path is not None
+                else ""
+            )
             raise BlueZPairingUnavailable(
-                f"{address} is not present in the local BlueZ object tree"
+                f"{address} is not present{location} in the local BlueZ object tree"
             )
 
         if await _is_paired(bus, device_path):
@@ -236,8 +245,12 @@ async def async_pair_with_bluez(address: str, timeout: float) -> None:
             bus.disconnect()
 
 
-async def _find_device_path(bus: Any, address: str) -> str | None:
-    """Find a BlueZ Device1 object by its advertised address."""
+async def _find_device_path(
+    bus: Any,
+    address: str,
+    selected_device_path: str | None = None,
+) -> str | None:
+    """Find an address, restricted to Home Assistant's selected BlueZ path."""
     reply = await bus.call(
         Message(
             destination=_BLUEZ_SERVICE,
@@ -248,9 +261,17 @@ async def _find_device_path(bus: Any, address: str) -> str | None:
     )
     _raise_for_reply_error(reply, "reading BlueZ devices")
 
-    expected = address.upper()
     managed_objects = reply.body[0] if reply.body else {}
-    for path, interfaces in managed_objects.items():
+    if selected_device_path is not None:
+        interfaces = managed_objects.get(selected_device_path)
+        candidates = (
+            [(selected_device_path, interfaces)] if interfaces is not None else []
+        )
+    else:
+        candidates = managed_objects.items()
+
+    expected = address.upper()
+    for path, interfaces in candidates:
         device = interfaces.get(_DEVICE_INTERFACE)
         if device is None:
             continue

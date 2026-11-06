@@ -15,9 +15,15 @@ from custom_components.tion_ble.bluez_pairing import (
 class _FakeBus:
     """Return scripted BlueZ replies while recording the pairing sequence."""
 
-    def __init__(self, pair_error: bool = False, already_paired: bool = False) -> None:
+    def __init__(
+        self,
+        pair_error: bool = False,
+        already_paired: bool = False,
+        device_paths: tuple[str, ...] | None = None,
+    ) -> None:
         self.pair_error = pair_error
         self.already_paired = already_paired
+        self.device_paths = device_paths or ("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF",)
         self.calls = []
         self.exported_agent = None
         self.unexport = MagicMock()
@@ -32,13 +38,14 @@ class _FakeBus:
             return _reply(
                 body=[
                     {
-                        "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF": {
+                        path: {
                             "org.bluez.Device1": {
                                 "Address": bluez_pairing.Variant(
                                     "s", "AA:BB:CC:DD:EE:FF"
                                 )
                             }
                         }
+                        for path in self.device_paths
                     }
                 ]
             )
@@ -112,6 +119,25 @@ async def test_pair_registers_agent_on_same_bus_and_cleans_up(
     assert register.body == [bluez_pairing._AGENT_PATH, "NoInputNoOutput"]
     assert bus.unexport.call_count == 1
     assert bus.disconnected is True
+
+
+async def test_pair_uses_home_assistant_selected_adapter_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pair through hci1 when the same address is also visible through hci0."""
+    hci0_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    hci1_path = "/org/bluez/hci1/dev_AA_BB_CC_DD_EE_FF"
+    bus = _FakeBus(device_paths=(hci0_path, hci1_path))
+    monkeypatch.setattr(
+        bluez_pairing,
+        "MessageBus",
+        lambda **_kwargs: _FakeBusFactory(bus),
+    )
+
+    await async_pair_with_bluez("AA:BB:CC:DD:EE:FF", 10.0, hci1_path)
+
+    pair_call = next(message for message in bus.calls if message.member == "Pair")
+    assert pair_call.path == hci1_path
 
 
 async def test_pair_error_reports_agent_callbacks_and_still_cleans_up(
