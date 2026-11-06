@@ -5,6 +5,7 @@ import struct
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
+from bleak.backends.device import BLEDevice
 
 from custom_components.tion_ble import client as client_module
 from custom_components.tion_ble.bluez_pairing import (
@@ -144,7 +145,12 @@ async def test_pair_uses_direct_bluez_agent_without_gatt_connection(
     client: TionLiteClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pair a local device through the dedicated BlueZ agent."""
-    ble_device = object()
+    bluez_path = "/org/bluez/hci1/dev_AA_BB_CC_DD_EE_FF"
+    ble_device = BLEDevice(
+        "AA:BB:CC:DD:EE:FF",
+        "Tion Lite",
+        {"path": bluez_path, "props": {}},
+    )
     direct_pair = AsyncMock()
     establish = AsyncMock()
     monkeypatch.setattr(client, "_ble_device", lambda: ble_device)
@@ -153,7 +159,11 @@ async def test_pair_uses_direct_bluez_agent_without_gatt_connection(
 
     await client._async_pair()
 
-    direct_pair.assert_awaited_once_with("AA:BB:CC:DD:EE:FF", 45.0)
+    direct_pair.assert_awaited_once_with(
+        "AA:BB:CC:DD:EE:FF",
+        45.0,
+        bluez_path,
+    )
     establish.assert_not_awaited()
 
 
@@ -161,21 +171,23 @@ async def test_pair_falls_back_to_bleak_for_non_bluez_scanner(
     client: TionLiteClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Let Bleak pair when a proxy device has no local BlueZ object."""
-    ble_device = object()
+    ble_device = BLEDevice(
+        "AA:BB:CC:DD:EE:FF",
+        "Tion Lite",
+        {"source": "esphome-proxy"},
+    )
     bleak_client = MagicMock(is_connected=True)
     bleak_client.pair = AsyncMock()
     bleak_client.disconnect = AsyncMock()
     establish = AsyncMock(return_value=bleak_client)
     monkeypatch.setattr(client, "_ble_device", lambda: ble_device)
-    monkeypatch.setattr(
-        client_module,
-        "async_pair_with_bluez",
-        AsyncMock(side_effect=BlueZPairingUnavailable("not local")),
-    )
+    direct_pair = AsyncMock(side_effect=BlueZPairingUnavailable("not local"))
+    monkeypatch.setattr(client_module, "async_pair_with_bluez", direct_pair)
     monkeypatch.setattr(client_module, "establish_connection", establish)
 
     await client._async_pair()
 
+    direct_pair.assert_not_awaited()
     assert establish.await_args.kwargs["pair"] is True
     assert establish.await_args.kwargs["max_attempts"] == 3
     bleak_client.pair.assert_not_awaited()
@@ -186,8 +198,14 @@ async def test_pair_surfaces_direct_bluez_authentication_error(
     client: TionLiteClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Do not hide detailed BlueZ agent diagnostics behind Bleak retries."""
+    bluez_path = "/org/bluez/hci1/dev_AA_BB_CC_DD_EE_FF"
+    ble_device = BLEDevice(
+        "AA:BB:CC:DD:EE:FF",
+        "Tion Lite",
+        {"path": bluez_path, "props": {}},
+    )
     establish = AsyncMock()
-    monkeypatch.setattr(client, "_ble_device", lambda: object())
+    monkeypatch.setattr(client, "_ble_device", lambda: ble_device)
     monkeypatch.setattr(
         client_module,
         "async_pair_with_bluez",
